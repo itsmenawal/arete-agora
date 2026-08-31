@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Debate — Arete Agora</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a href="index.html" class="brand">ARETE AGORA</a>
+    <ul class="nav-links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="study.html">Study</a></li>
+      <li><a href="teach.html">Teach</a></li>
+      <li><a href="debate.html" class="active">Debate</a></li>
+      <li><a href="courses.html">Courses</a></li>
+    </ul>
+  </div>
+</nav>
+
+<section class="form-page">
+  <div class="wrap">
+    <div class="form-shell" id="debate-form-shell">
+      <h1>Find a debate partner</h1>
+      <p class="lead">Enter your name, email, a topic you want to debate, and when you're free. We'll show you everyone else available at that time.</p>
+
+      <form id="debate-info-form">
+        <label for="d-name">Your name</label>
+        <input type="text" id="d-name" required>
+
+        <label for="d-email">Your email</label>
+        <input type="email" id="d-email" required>
+        <p class="form-note">Your Zoom link will be sent here once you're matched.</p>
+
+        <label for="d-topic">Topic you want to debate</label>
+        <input type="text" id="d-topic" placeholder="e.g. Should homework be banned?" required>
+
+        <label for="d-time">When are you free?</label>
+        <select id="d-time" required>
+          <option value="" disabled selected>Choose a time slot</option>
+          <option value="mon-evening">Monday evening</option>
+          <option value="tue-evening">Tuesday evening</option>
+          <option value="wed-evening">Wednesday evening</option>
+          <option value="thu-evening">Thursday evening</option>
+          <option value="fri-evening">Friday evening</option>
+          <option value="sat-morning">Saturday morning</option>
+          <option value="sat-afternoon">Saturday afternoon</option>
+          <option value="sun-morning">Sunday morning</option>
+          <option value="sun-afternoon">Sunday afternoon</option>
+        </select>
+
+        <div class="submit-row">
+          <button type="submit" class="btn btn-primary">Find debate partners</button>
+        </div>
+        <div id="submit-status" class="status-msg"></div>
+      </form>
+    </div>
+
+    <div class="form-shell" id="results-shell" style="display:none; margin-top:24px;">
+      <h1 style="font-size:1.5rem;">Available at your chosen time</h1>
+      <div id="results-list"></div>
+      <div id="results-status" class="status-msg"></div>
+      <p style="text-align:center; margin-top:20px;">
+        <a href="debate.html" style="font-size:0.9rem; color: var(--maroon);">← Start over</a>
+      </p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Arete Agora — <a href="mailto:areteagora@gmail.com">areteagora@gmail.com</a> · <a href="https://instagram.com/arete_agora" target="_blank">@arete_agora</a></p>
+  </div>
+</footer>
+
+<script src="config.js"></script>
+<script>
+  let myRequestId = null;
+  let myName = '';
+  let myEmail = '';
+
+  document.getElementById('debate-info-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    myName = document.getElementById('d-name').value;
+    myEmail = document.getElementById('d-email').value;
+    const topic = document.getElementById('d-topic').value;
+    const timeSlot = document.getElementById('d-time').value;
+    const submitStatus = document.getElementById('submit-status');
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+
+    // Save this person's own request first, so others can find them too.
+    const { data: inserted, error: insertError } = await supabaseClient
+      .from('debate_requests')
+      .insert({ name: myName, email: myEmail, topic, time_slot: timeSlot })
+      .select();
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Find debate partners';
+
+    if (insertError || !inserted) {
+      submitStatus.className = 'status-msg err';
+      submitStatus.textContent = 'Something went wrong — please try again.';
+      return;
+    }
+
+    myRequestId = inserted[0].id;
+
+    document.getElementById('debate-form-shell').style.display = 'none';
+    document.getElementById('results-shell').style.display = 'block';
+
+    // Find other OPEN requests at the same time slot (not this person's own).
+    const { data, error } = await supabaseClient
+      .from('debate_requests')
+      .select('*')
+      .eq('time_slot', timeSlot)
+      .eq('status', 'open')
+      .neq('id', myRequestId)
+      .order('created_at', { ascending: true });
+
+    const list = document.getElementById('results-list');
+
+    if (error) {
+      list.innerHTML = '<p>Something went wrong loading partners.</p>';
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      list.innerHTML = '<p style="color: rgba(32,28,24,0.65);">No one else is free at this time yet — you\'re on the list, so check back or share the site with a friend.</p>';
+      return;
+    }
+
+    list.innerHTML = data.map(r => `
+      <div class="request-row" data-id="${r.id}" data-name="${r.name}" data-email="${r.email}" data-topic="${r.topic}" style="border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; gap:16px;">
+        <div>
+          <strong>${r.name}</strong> wants to debate: <strong>${r.topic}</strong>
+        </div>
+        <button class="btn btn-primary claim-btn" style="white-space:nowrap;">Debate with them</button>
+      </div>
+    `).join('');
+
+    document.querySelectorAll('.claim-btn').forEach(btn => {
+      btn.addEventListener('click', handleClaim);
+    });
+  });
+
+  async function handleClaim(e) {
+    const row = e.target.closest('.request-row');
+    const opponentRequestId = row.dataset.id;
+    const opponentName = row.dataset.name;
+    const opponentEmail = row.dataset.email;
+    const opponentTopic = row.dataset.topic;
+    const status = document.getElementById('results-status');
+
+    e.target.disabled = true;
+    e.target.textContent = 'Matching...';
+
+    // Atomic claim on the OPPONENT's request row.
+    const { data: claimedOpponent, error: claimError1 } = await supabaseClient
+      .from('debate_requests')
+      .update({ status: 'matched' })
+      .eq('id', opponentRequestId)
+      .eq('status', 'open')
+      .select();
+
+    if (claimError1 || !claimedOpponent || claimedOpponent.length === 0) {
+      status.className = 'status-msg err';
+      status.textContent = 'Someone already matched with them — sorry! Try another.';
+      row.remove();
+      return;
+    }
+
+    // Also mark this person's own request as matched.
+    await supabaseClient
+      .from('debate_requests')
+      .update({ status: 'matched' })
+      .eq('id', myRequestId);
+
+    e.target.textContent = 'Setting up Zoom...';
+
+    try {
+      const zoomLink = await createZoomMeeting(`Debate: ${opponentTopic}`);
+
+      await supabaseClient.from('debate_matches').insert({
+        request_id: opponentRequestId,
+        requester_name: myName,
+        requester_email: myEmail,
+        opponent_name: opponentName,
+        opponent_email: opponentEmail,
+        topic: opponentTopic,
+        zoom_link: zoomLink
+      });
+
+      await sendMatchEmail(myEmail, myName, opponentName, zoomLink, opponentTopic);
+      await sendMatchEmail(opponentEmail, opponentName, myName, zoomLink, opponentTopic);
+
+      status.className = 'status-msg ok';
+      status.textContent = `Matched with ${opponentName}! Zoom link emailed to both of you.`;
+      document.querySelectorAll('.claim-btn').forEach(b => b.disabled = true);
+    } catch (err) {
+      status.className = 'status-msg err';
+      status.textContent = 'Matched, but the Zoom link failed to send: ' + err.message;
+    }
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Offer to Teach — Arete Agora</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a href="index.html" class="brand">ARETE AGORA</a>
+    <ul class="nav-links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="study.html">Study</a></li>
+      <li><a href="teach.html" class="active">Teach</a></li>
+      <li><a href="debate.html">Debate</a></li>
+      <li><a href="courses.html">Courses</a></li>
+    </ul>
+  </div>
+</nav>
+
+<section class="form-page">
+  <div class="wrap">
+    <div class="form-shell" id="mentor-form-shell">
+      <h1>Offer to teach</h1>
+      <p class="lead">Tell us your name, email, and when you're free. You'll then see every student who requested that same time — claim one to send both of you a Zoom link.</p>
+
+      <form id="mentor-info-form">
+        <label for="mentor-name">Your name</label>
+        <input type="text" id="mentor-name" required>
+
+        <label for="mentor-email">Your email</label>
+        <input type="email" id="mentor-email" required>
+        <p class="form-note">Zoom links for students you claim will be sent to this address too.</p>
+
+        <label for="time">When are you available to teach?</label>
+        <select id="time" required>
+          <option value="" disabled selected>Choose a time slot</option>
+          <option value="mon-evening">Monday evening</option>
+          <option value="tue-evening">Tuesday evening</option>
+          <option value="wed-evening">Wednesday evening</option>
+          <option value="thu-evening">Thursday evening</option>
+          <option value="fri-evening">Friday evening</option>
+          <option value="sat-morning">Saturday morning</option>
+          <option value="sat-afternoon">Saturday afternoon</option>
+          <option value="sun-morning">Sunday morning</option>
+          <option value="sun-afternoon">Sunday afternoon</option>
+        </select>
+
+        <div class="submit-row">
+          <button type="submit" class="btn btn-primary">See matching students</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="form-shell" id="results-shell" style="display:none; margin-top:24px;">
+      <h1 id="results-heading" style="font-size:1.5rem;"></h1>
+      <div id="results-list"></div>
+      <div id="results-status" class="status-msg"></div>
+      <p style="text-align:center; margin-top:20px;">
+        <a href="teach.html" style="font-size:0.9rem; color: var(--maroon);">← Choose a different time</a>
+      </p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Arete Agora — <a href="mailto:areteagora@gmail.com">areteagora@gmail.com</a> · <a href="https://instagram.com/arete_agora" target="_blank">@arete_agora</a></p>
+  </div>
+</footer>
+
+<script src="config.js"></script>
+<script>
+  let mentorName = '';
+  let mentorEmail = '';
+
+  document.getElementById('mentor-info-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    mentorName = document.getElementById('mentor-name').value;
+    mentorEmail = document.getElementById('mentor-email').value;
+    const timeSlot = document.getElementById('time').value;
+
+    document.getElementById('mentor-form-shell').style.display = 'none';
+    const resultsShell = document.getElementById('results-shell');
+    resultsShell.style.display = 'block';
+    document.getElementById('results-heading').textContent = 'Students available at this time';
+
+    const { data, error } = await supabaseClient
+      .from('study_requests')
+      .select('*')
+      .eq('time_slot', timeSlot)
+      .eq('status', 'open')
+      .order('created_at', { ascending: true });
+
+    const list = document.getElementById('results-list');
+
+    if (error) {
+      list.innerHTML = '<p>Something went wrong loading requests.</p>';
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      list.innerHTML = '<p style="color: rgba(32,28,24,0.65);">No open requests for this time slot yet — check back later.</p>';
+      return;
+    }
+
+    list.innerHTML = data.map(r => `
+      <div class="request-row" data-id="${r.id}" data-name="${r.name}" data-email="${r.email}" data-topic="${r.topic}" style="border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; gap:16px;">
+        <div>
+          <strong>${r.name}</strong> wants to study <strong>${r.topic}</strong>
+        </div>
+        <button class="btn btn-primary claim-btn" style="white-space:nowrap;">Claim this student</button>
+      </div>
+    `).join('');
+
+    document.querySelectorAll('.claim-btn').forEach(btn => {
+      btn.addEventListener('click', handleClaim);
+    });
+  });
+
+  async function handleClaim(e) {
+    const row = e.target.closest('.request-row');
+    const requestId = row.dataset.id;
+    const studentName = row.dataset.name;
+    const studentEmail = row.dataset.email;
+    const studentTopic = row.dataset.topic;
+    const status = document.getElementById('results-status');
+
+    e.target.disabled = true;
+    e.target.textContent = 'Claiming...';
+
+    // Atomic claim: only succeeds if the request is still 'open'.
+    // If someone else claimed it a second earlier, this returns no rows.
+    const { data: claimed, error: claimError } = await supabaseClient
+      .from('study_requests')
+      .update({ status: 'matched' })
+      .eq('id', requestId)
+      .eq('status', 'open')
+      .select();
+
+    if (claimError || !claimed || claimed.length === 0) {
+      status.className = 'status-msg err';
+      status.textContent = 'Someone already claimed this student — sorry! Try another.';
+      row.remove();
+      return;
+    }
+
+    e.target.textContent = 'Setting up Zoom...';
+
+    try {
+      const zoomLink = await createZoomMeeting(`${studentTopic} with ${mentorName}`);
+
+      await supabaseClient.from('teach_matches').insert({
+        request_id: requestId,
+        student_name: studentName,
+        student_email: studentEmail,
+        student_topic: studentTopic,
+        mentor_name: mentorName,
+        mentor_email: mentorEmail,
+        zoom_link: zoomLink
+      });
+
+      await sendMatchEmail(studentEmail, studentName, mentorName, zoomLink, studentTopic);
+      await sendMatchEmail(mentorEmail, mentorName, studentName, zoomLink, studentTopic);
+
+      status.className = 'status-msg ok';
+      status.textContent = `Matched with ${studentName}! Zoom link emailed to both of you.`;
+      row.remove();
+    } catch (err) {
+      status.className = 'status-msg err';
+      status.textContent = 'Matched, but the Zoom link failed to send: ' + err.message;
+      row.remove();
+    }
+  }
+</script>
+
+</body>
+</html>
