@@ -7,16 +7,16 @@
 
 // ---- Supabase (your database) ----
 // Supabase dashboard → Project Settings → API
-const SUPABASE_URL = "PASTE_YOUR_SUPABASE_URL_HERE";
-const SUPABASE_ANON_KEY = "PASTE_YOUR_SUPABASE_ANON_KEY_HERE";
+const SUPABASE_URL = "https://mmairgkukzpwsmaqahec.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1tYWlyZ2t1a3pwd3NtYXFhaGVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxODk5MDEsImV4cCI6MjEwMzc2NTkwMX0.ofRBcQUfLcH3h9KFjXoll55kX3IbCoLOaoczmP9b4Us";
 
 // ---- EmailJS (sends the Zoom link emails) ----
 // EmailJS dashboard → Account → General → Public Key
-const EMAILJS_PUBLIC_KEY = "PASTE_YOUR_EMAILJS_PUBLIC_KEY_HERE";
+const EMAILJS_PUBLIC_KEY = "6u2H3bRB7eFedd4B7";
 // EmailJS dashboard → Email Services → your service's ID
-const EMAILJS_SERVICE_ID = "PASTE_YOUR_EMAILJS_SERVICE_ID_HERE";
+const EMAILJS_SERVICE_ID = "service_2at37vf";
 // EmailJS dashboard → Email Templates → your template's ID
-const EMAILJS_TEMPLATE_ID = "PASTE_YOUR_EMAILJS_TEMPLATE_ID_HERE";
+const EMAILJS_TEMPLATE_ID = "template_wtnr60v";
 
 // ---- Shared setup (do not edit below this line) ----
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
